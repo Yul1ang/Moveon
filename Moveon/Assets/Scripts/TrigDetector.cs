@@ -13,7 +13,6 @@ public class TrigDetector : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        Debug.Log("Philosopher has collided with Trig!");
         collided = true;
     }
 

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -8,35 +9,80 @@ public class SceneControl : MonoBehaviour
 {
     [SerializeField] private GameObject[] prefabs;
     [SerializeField] private GameObject philo;
-    [SerializeField] private GameObject decisionPanel;
+    [SerializeField] private GameObject decision;
     [SerializeField] private GameObject trigDet;
-    private bool stop;
+    [SerializeField] private GameObject refute;
+    [SerializeField] private GameObject buttonYes;
+    [SerializeField] private GameObject buttonNo;
+    [SerializeField] private TextMeshProUGUI dayText;
+    [SerializeField] private GameObject player;
+    public bool playerStop;
+    private bool inDecision;
     private float spawnInterval;
     private float spawnPhiloInterval;
-    private float days;
+    private float philoTimer;
+    private float daysCounter;
     private float timer;
     private List<GameObject> instances;
     private GameObject philosopher;
-    void Start()
+    private AudioSource audioSource;
+
+    private void Start()
     {
-        stop = false;
+        dayText.text = "";
+        LoadDaysCounter();
+        inDecision = false;
+        playerStop = false;
         instances = new List<GameObject>();
-        spawnPhiloInterval = 9.0f;
+        spawnPhiloInterval = 10.0f;
         spawnInterval = 2.0f;
         timer = 2.0f;
-        days = 0.0f;
-        decisionPanel.SetActive(false);
+        philoTimer = 0.0f;
+        decision.SetActive(false);
+        refute.SetActive(false);
+        buttonYes.SetActive(false);
+        buttonNo.SetActive(false);
+        audioSource = GetComponent<AudioSource>();
     }
 
-    void Update()
+    private void Update()
     {
         timer += Time.deltaTime;
-        days += Time.deltaTime;
-        if ((Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D)) && !stop)
+        if (philosopher == null)
+        {
+            philoTimer += Time.deltaTime;
+        }
+        daysCounter += Time.deltaTime;
+        if (daysCounter / 10 < 2)
+        {
+            dayText.text = (daysCounter / 10).ToString("F0") + " Day";
+        }
+        else
+        {
+            dayText.text = (daysCounter / 10).ToString("F0") + " Days";
+        }
+
+        if (IsMoving())
+        {
+            if (!audioSource.isPlaying)
+            {
+                audioSource.Play();
+            }
+        }
+        else
+        {
+            if (audioSource.isPlaying)
+            {
+                audioSource.Stop();
+
+            }
+        }
+
+        if ((Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D)) && !inDecision)
         {
             StartAllMovement();
         }
-        if ((Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D)) && timer >= spawnInterval && !stop)
+        if ((Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D)) && timer >= spawnInterval && !inDecision)
         {
             SpawnPrefab();
             timer = 0f;
@@ -45,27 +91,37 @@ public class SceneControl : MonoBehaviour
         {
             StopAllMovement();
         }
-        if (trigDet.GetComponent<TrigDetector>().collided)
+        if (philosopher != null && trigDet.GetComponent<TrigDetector>().collided)
         {
             philosopher.GetComponent<Rigidbody2D>().velocity = Vector2.zero;
             StopAllMovement();
-            StartCoroutine(DecisionPanel());
-            // StartAllMovement();
-            // philosopher.GetComponent<Rigidbody2D>().velocity = new Vector2(-5, 0);
+            DecisionPanel();
+
         }
-        if ((Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D)) && days >= spawnPhiloInterval && !stop)
+        if ((Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D)) && philoTimer >= spawnPhiloInterval && !inDecision)
         {
             SpawnPrefabPhilo();
-            days = 0f;
+            philoTimer = 0f;
         }
     }
 
-    void SpawnPrefab()
+    private void SpawnPrefab()
     {
         int index = Random.Range(0, prefabs.Length);
+        Vector3 spawnPosition;
+        Vector3 spawnScale;
 
-        Vector3 spawnPosition = new Vector3(11, Random.Range(2.0f, 3.5f), 0);
-        Vector3 spawnScale = new Vector3(0.25f, 0.25f, 1);
+        if (index < 3)
+        {
+            spawnPosition = new Vector3(11, Random.Range(2.0f, 3.5f), 0);
+            spawnScale = new Vector3(0.25f, 0.25f, 1);
+        }
+        else
+        {
+            spawnPosition = new Vector3(11, -0.25f, 0);
+            spawnScale = new Vector3(0.5f, 0.5f, 1);
+        }
+
 
         GameObject instance = Instantiate(prefabs[index], spawnPosition, Quaternion.identity);
         instance.transform.localScale = spawnScale;
@@ -80,7 +136,7 @@ public class SceneControl : MonoBehaviour
         instances.Add(instance);
     }
 
-    void StopAllMovement()
+    private void StopAllMovement()
     {
         instances.RemoveAll(instance => instance == null);
         foreach (var instance in instances)
@@ -92,7 +148,7 @@ public class SceneControl : MonoBehaviour
             }
         }
     }
-    void StartAllMovement()
+    private void StartAllMovement()
     {
         instances.RemoveAll(instance => instance == null);
         foreach (var instance in instances)
@@ -105,7 +161,7 @@ public class SceneControl : MonoBehaviour
         }
     }
 
-    void SpawnPrefabPhilo()
+    private void SpawnPrefabPhilo()
     {
         philosopher = Instantiate(philo, philo.transform.position, Quaternion.identity);
         philosopher.AddComponent<PrefabDestroy>();
@@ -118,24 +174,98 @@ public class SceneControl : MonoBehaviour
         rb.velocity = new Vector2(-5, 0);
     }
 
-    IEnumerator DecisionPanel()
+    private void DecisionPanel()
     {
-        stop = true;
-        decisionPanel.SetActive(true);
-        yield return new WaitForSeconds(10f);
-        decisionPanel.SetActive(false);
-        stop = false;
+        if (!inDecision)
+        {
+            playerStop = true;
+            inDecision = true;
+            decision.SetActive(true);
+            buttonYes.SetActive(true);
+            buttonNo.SetActive(true);
+            philoTimer = 0f;
+            PauseGame();
+        }
     }
 
     public void OnYesClicked()
     {
-        Debug.Log("Sí fue seleccionado. Mostrar frase.");
-        decisionPanel.SetActive(false);
+        playerStop = true;
+        decision.SetActive(false);
+        buttonYes.SetActive(false);
+        buttonNo.SetActive(false);
+        refute.SetActive(true);
+        Time.timeScale = 1;
+        StartCoroutine(DeactivateAfterTime(2));
     }
 
     public void OnNoClicked()
     {
-        Debug.Log("No fue seleccionado. Continuar juego.");
-        decisionPanel.SetActive(false);
+        ResumeGame();
+    }
+
+    private void PauseGame()
+    {
+        Time.timeScale = 0;
+    }
+
+    private void ResumeGame()
+    {
+        if (inDecision)
+        {
+            Time.timeScale = 1;
+            decision.SetActive(false);
+            buttonYes.SetActive(false);
+            buttonNo.SetActive(false);
+            inDecision = false;
+            trigDet.GetComponent<TrigDetector>().ResetTrig();
+            StartAllMovement();
+            playerStop = false;
+            philosopher.GetComponent<Rigidbody2D>().velocity = new Vector2(-5, 0);
+        }
+    }
+
+    private IEnumerator DeactivateAfterTime(float time)
+    {
+        yield return new WaitForSeconds(time);
+        refute.SetActive(false);
+        ResumeGame();
+    }
+    private void SaveDaysCounter()
+    {
+        PlayerPrefs.SetFloat("DaysCounter", daysCounter);
+        PlayerPrefs.Save();
+    }
+    private void LoadDaysCounter()
+    {
+        if (PlayerPrefs.HasKey("DaysCounter"))
+        {
+            daysCounter = PlayerPrefs.GetFloat("DaysCounter");
+        }
+        else
+        {
+            daysCounter = 0;
+        }
+    }
+    public void OnExitClicked()
+    {
+        SaveDaysCounter();
+        Application.Quit();
+    }
+
+    public void OnRestartClicked()
+    {
+        daysCounter = 0;
+    }
+
+    private bool IsMoving()
+    {
+        Animator animPlayer = player.GetComponent<Animator>();
+        Rigidbody2D rbPhilo = null;
+        if (philosopher != null)
+        {
+            rbPhilo = philosopher.GetComponent<Rigidbody2D>();
+        }
+        return animPlayer.GetBool("Run") || (rbPhilo != null && rbPhilo.velocity.magnitude > 0.1f);
     }
 }

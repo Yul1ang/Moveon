@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class PrefabDestroy : MonoBehaviour
 { 
-    void Update()
+    private void Update()
     {
         if (transform.position.x < -11)
         {
